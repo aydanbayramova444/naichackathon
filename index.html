@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="az">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CrossAI</title>
+<meta name="description" content="CrossAI: velosipedçilər üçün süni intellektlə təhlükəsiz marşrut, canlı xəbərdarlıq və Safety Score.">
+<style>html,body{margin:0;padding:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,600;0,700;0,800;0,900;1,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: night-city map hero (live canvas) + 3D phone; bento features; interactive route demo; one mint route line is the brand */
+:root{
+  --bg:#070D0B; --bg-2:#0B1512; --panel:#0F1B17; --panel-2:#13231D;
+  --line:rgba(170,255,214,.09); --line-2:rgba(170,255,214,.16);
+  --fg:#EDF5F0; --muted:#9FB5A9; --dim:#6E857A;
+  --mint:#3DDC97; --mint-2:#8CF5C4; --orange:#FF8A3D; --red:#FF5D5D;
+  --display:'Montserrat','Arial Black',Arial,sans-serif;
+  --text:'Inter',system-ui,-apple-system,Arial,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--fg);font-family:var(--text);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--bg)}
+a{color:inherit}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.02;letter-spacing:-.035em;text-wrap:balance}
+p{margin:0}
+.wrap{max-width:1200px;margin:0 auto;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px))}
+.mono{font-family:var(--mono)}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;font:500 12px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--mint)}
+.eyebrow::before{content:"";width:22px;height:2px;border-radius:2px;background:var(--mint)}
+.grad{background:linear-gradient(100deg,var(--mint) 0%,var(--mint-2) 45%,#E9FFF4 70%,var(--mint) 100%);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+@keyframes shine{to{background-position:-200% 0}}
+
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:10px;font:600 16px/1 var(--text);padding:17px 26px;border-radius:999px;border:0;cursor:pointer;text-decoration:none;transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s,background .25s;white-space:nowrap}
+.btn-primary{background:var(--mint);color:#04140D;box-shadow:0 0 0 0 rgba(61,220,151,.5),0 10px 30px -8px rgba(61,220,151,.6)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 0 0 6px rgba(61,220,151,.15),0 18px 40px -10px rgba(61,220,151,.7)}
+.btn-ghost{background:rgba(255,255,255,.04);color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-2);backdrop-filter:blur(8px)}
+.btn-ghost:hover{background:rgba(255,255,255,.08);transform:translateY(-2px)}
+.btn svg{transition:transform .25s}
+.btn:hover svg{transform:translateX(3px)}
+:focus-visible{outline:2px solid var(--orange);outline-offset:3px;border-radius:8px}
+
+/* NAV */
+header{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:0;right:0;z-index:50;pointer-events:none}
+.nav{pointer-events:auto;display:flex;align-items:center;justify-content:space-between;gap:16px;height:62px;padding:0 10px 0 22px;border-radius:999px;background:rgba(11,21,18,.62);backdrop-filter:blur(18px) saturate(1.4);box-shadow:inset 0 0 0 1px var(--line-2),0 20px 50px -20px rgba(0,0,0,.6)}
+.logo{display:flex;align-items:center;gap:10px;font:900 22px/1 var(--display);letter-spacing:-.04em;text-decoration:none}
+.logo i{font-style:normal;color:var(--mint)}
+.logo .mark{width:30px;height:30px}
+.nav-links{display:flex;gap:4px;font-size:14px;color:var(--muted)}
+.nav-links a{text-decoration:none;padding:9px 14px;border-radius:999px;transition:background .2s,color .2s}
+.nav-links a:hover{color:var(--fg);background:rgba(255,255,255,.06)}
+.nav .btn{padding:12px 18px;font-size:14px}
+@media (max-width:880px){.nav-links{display:none}}
+
+/* HERO */
+.hero{position:relative;min-height:0;padding-block:150px 110px;overflow:hidden;isolation:isolate}
+#city{position:absolute;inset:0;width:100%;height:100%;z-index:-2}
+.hero::before{content:"";position:absolute;inset:0;z-index:-1;background:
+  radial-gradient(60% 50% at 75% 40%,rgba(61,220,151,.18),transparent 70%),
+  radial-gradient(40% 40% at 10% 90%,rgba(255,138,61,.10),transparent 70%),
+  linear-gradient(180deg,rgba(7,13,11,.2) 0%,rgba(7,13,11,.55) 60%,var(--bg) 100%)}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:40px;align-items:center}
+.badge{display:inline-flex;align-items:center;gap:10px;padding:7px 14px 7px 8px;border-radius:999px;background:rgba(61,220,151,.08);box-shadow:inset 0 0 0 1px rgba(61,220,151,.25);font-size:13px;color:var(--mint-2)}
+.badge b{font:700 11px/1 var(--mono);letter-spacing:.08em;background:var(--mint);color:#04140D;padding:5px 8px;border-radius:999px}
+.hero h1{font-size:clamp(50px,8vw,112px);font-weight:900;margin-top:26px}
+.hero h1 .line{display:block;overflow:hidden}
+.hero h1 .line span{display:inline-block;animation:rise .9s cubic-bezier(.2,.8,.2,1) both}
+.hero h1 .line:nth-child(2) span{animation-delay:.08s}
+.hero h1 .line:nth-child(3) span{animation-delay:.16s}
+@keyframes rise{from{transform:translateY(60%);opacity:.2}to{transform:none;opacity:1}}
+.lede{font-size:clamp(18px,1.8vw,21px);color:var(--muted);max-width:36ch;margin-top:26px}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:36px}
+.trust{display:flex;align-items:center;gap:14px;margin-top:40px;color:var(--dim);font-size:14px}
+.avatars{display:flex}
+.avatars span{width:34px;height:34px;border-radius:50%;border:2px solid var(--bg);margin-left:-10px;display:grid;place-items:center;font:700 12px/1 var(--display);color:#04140D}
+.avatars span:first-child{margin-left:0}
+
+/* PHONE */
+.stage{position:relative;perspective:1400px;display:grid;place-items:center;min-height:620px}
+.phone{position:relative;width:300px;height:612px;border-radius:50px;padding:11px;background:linear-gradient(145deg,#2A3833,#0A100E 40%,#1C2824);box-shadow:0 60px 120px -30px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.06),0 0 80px -10px rgba(61,220,151,.25);transform:rotateY(-14deg) rotateX(6deg);transform-style:preserve-3d;transition:transform .2s ease-out;animation:float 6s ease-in-out infinite}
+@keyframes float{50%{translate:0 -12px}}
+.notch{position:absolute;top:20px;left:50%;transform:translateX(-50%);width:96px;height:26px;border-radius:999px;background:#05090A;z-index:3}
+.screen{position:relative;height:100%;border-radius:40px;overflow:hidden;background:#0C1714}
+.screen svg.map{position:absolute;inset:0;width:100%;height:100%}
+.route{stroke-dasharray:1000;animation:draw 2.6s .4s cubic-bezier(.6,0,.2,1) both}
+@keyframes draw{from{stroke-dashoffset:1000}to{stroke-dashoffset:0}}
+.rider{offset-path:path("M56 540 C 80 450, 170 455, 178 385 S 110 280, 190 232 S 280 160, 246 92");animation:ride 8s linear infinite}
+@keyframes ride{from{offset-distance:0%}to{offset-distance:100%}}
+.ping{transform-origin:140px 440px;animation:ping 2s ease-out infinite}
+@keyframes ping{from{transform:scale(.4);opacity:.8}to{transform:scale(2.2);opacity:0}}
+.ui-top{position:absolute;top:56px;left:12px;right:12px;padding:12px 14px;border-radius:18px;background:rgba(10,20,17,.82);backdrop-filter:blur(10px);box-shadow:inset 0 0 0 1px var(--line-2);display:flex;gap:12px;align-items:center;font-size:12px;color:var(--muted)}
+.ui-top strong{display:block;color:var(--fg);font-size:14px}
+.turn{flex:none;width:36px;height:36px;border-radius:12px;background:var(--mint);display:grid;place-items:center}
+.ui-bottom{position:absolute;bottom:12px;left:12px;right:12px;padding:16px;border-radius:22px;background:rgba(10,20,17,.88);backdrop-filter:blur(10px);box-shadow:inset 0 0 0 1px var(--line-2)}
+.ui-bottom .row{display:flex;justify-content:space-between;align-items:baseline}
+.ui-bottom .big{font:800 26px/1 var(--display)}
+.ui-bottom small{font:500 10px/1 var(--mono);letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.bar{height:6px;border-radius:6px;background:rgba(255,255,255,.08);margin-top:12px;overflow:hidden}
+.bar i{display:block;height:100%;width:62%;background:linear-gradient(90deg,var(--mint),var(--mint-2));border-radius:inherit;animation:grow 3s .6s ease-out both}
+@keyframes grow{from{width:0}}
+
+.float{position:absolute;padding:12px 16px;border-radius:18px;background:rgba(15,27,23,.78);backdrop-filter:blur(14px);box-shadow:inset 0 0 0 1px var(--line-2),0 20px 40px -15px rgba(0,0,0,.7);display:flex;gap:12px;align-items:center;font-size:13px;color:var(--muted);white-space:nowrap;animation:bob 5s ease-in-out infinite}
+.float strong{display:block;color:var(--fg);font-size:14px}
+.float .ic{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;flex:none}
+.f1{top:150px;right:calc(50% + 118px);animation-delay:-1s}
+.f2{top:290px;left:calc(50% + 112px);animation-delay:-2.5s}
+.f3{bottom:150px;right:calc(50% + 104px);animation-delay:-4s}
+@keyframes bob{50%{transform:translateY(-10px)}}
+.score-ring{width:44px;height:44px}
+
+/* MARQUEE */
+.marquee{border-block:1px solid var(--line);background:var(--bg-2);overflow:hidden;padding-block:22px}
+.track{display:flex;gap:56px;width:max-content;animation:scroll 32s linear infinite}
+.track span{display:flex;align-items:center;gap:56px;font:800 clamp(22px,2.6vw,32px)/1 var(--display);letter-spacing:-.02em;color:var(--fg);white-space:nowrap}
+.track span::after{content:"";width:12px;height:12px;border-radius:50%;background:var(--mint);box-shadow:0 0 18px var(--mint)}
+.track span:nth-child(even){color:transparent;-webkit-text-stroke:1px var(--muted)}
+@keyframes scroll{to{transform:translateX(-50%)}}
+
+/* SECTIONS */
+section.band{padding-block:120px}
+.head{display:grid;gap:18px;max-width:760px;margin-bottom:56px}
+.head h2{font-size:clamp(38px,5.4vw,72px);font-weight:900}
+.head p{color:var(--muted);font-size:19px;max-width:56ch}
+
+/* PROBLEM */
+.problem-grid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:64px;align-items:start}
+.problem-grid .head{position:sticky;top:120px;margin:0}
+.plist{display:grid;gap:14px}
+.pitem{display:grid;grid-template-columns:64px 1fr auto;gap:20px;align-items:center;padding:24px 26px;border-radius:22px;background:linear-gradient(180deg,var(--panel),var(--bg-2));box-shadow:inset 0 0 0 1px var(--line);transition:transform .3s,box-shadow .3s}
+.pitem:hover{transform:translateX(6px);box-shadow:inset 0 0 0 1px rgba(255,138,61,.4)}
+.pitem .num{font:700 14px/1 var(--mono);color:var(--orange)}
+.pitem h3{font-size:22px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
+.pitem p{color:var(--dim);font-size:15px;margin-top:4px}
+.pitem svg{width:26px;height:26px;color:var(--orange);opacity:.8}
+
+/* BENTO */
+.bento{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px}
+.card{position:relative;overflow:hidden;border-radius:28px;padding:30px;background:linear-gradient(180deg,var(--panel-2),var(--panel));box-shadow:inset 0 0 0 1px var(--line);display:flex;flex-direction:column;gap:12px;min-height:280px;transition:box-shadow .3s,transform .3s}
+.card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(400px circle at var(--mx,50%) var(--my,0%),rgba(61,220,151,.12),transparent 50%);opacity:0;transition:opacity .3s}
+.card:hover{transform:translateY(-4px);box-shadow:inset 0 0 0 1px rgba(61,220,151,.35)}
+.card:hover::after{opacity:1}
+.card .k{font:500 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mint)}
+.card.warn .k{color:var(--orange)}
+.card h3{font-size:clamp(24px,2.4vw,32px);font-weight:800}
+.card p{color:var(--muted);font-size:16px;max-width:40ch}
+.c-route{grid-column:span 4;min-height:360px}
+.c-alert{grid-column:span 2}
+.c-score{grid-column:span 2}
+.c-comm{grid-column:span 2}
+.c-game{grid-column:span 2}
+.c-park{grid-column:span 6;flex-direction:row;align-items:center;justify-content:space-between;min-height:0;gap:30px;flex-wrap:wrap}
+.viz{margin-top:auto}
+.c-route svg{position:absolute;right:-20px;bottom:-20px;width:62%;height:auto;opacity:.95}
+.c-route .txt{position:relative;z-index:1;max-width:46%}
+.ripple{position:relative;height:110px;display:grid;place-items:center;margin-top:auto}
+.ripple i{position:absolute;width:40px;height:40px;border-radius:50%;border:2px solid var(--orange);animation:rip 2.4s ease-out infinite}
+.ripple i:nth-child(2){animation-delay:.8s}.ripple i:nth-child(3){animation-delay:1.6s}
+.ripple b{position:relative;width:46px;height:46px;border-radius:50%;background:var(--orange);display:grid;place-items:center;color:#1A0A00;font:900 22px/1 var(--display);box-shadow:0 0 30px rgba(255,138,61,.6)}
+@keyframes rip{from{transform:scale(.8);opacity:.9}to{transform:scale(3.4);opacity:0}}
+.gauge{display:flex;align-items:center;gap:18px;margin-top:auto}
+.gauge svg{width:110px;height:110px;flex:none}
+.gauge .v{font:900 44px/1 var(--display)}
+.gauge small{display:block;font:500 11px/1.4 var(--mono);letter-spacing:.1em;color:var(--dim);text-transform:uppercase}
+.feed{display:grid;gap:8px;margin-top:auto}
+.feed div{display:flex;gap:10px;align-items:center;font-size:14px;color:var(--muted);padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px var(--line)}
+.feed b{width:26px;height:26px;border-radius:50%;flex:none;display:grid;place-items:center;font:700 11px/1 var(--display);color:#04140D}
+.xp{margin-top:auto;display:grid;gap:10px}
+.xp .lvl{display:flex;justify-content:space-between;font:500 13px/1 var(--mono);color:var(--dim)}
+.xp .bar{margin:0;height:10px}
+.xp .bar i{width:74%}
+.medals{display:flex;gap:8px}
+.medals span{font:700 12px/1 var(--mono);padding:8px 10px;border-radius:10px;background:rgba(255,138,61,.12);color:var(--orange)}
+.medals span.m{background:rgba(61,220,151,.12);color:var(--mint)}
+.pins{display:flex;gap:10px;flex-wrap:wrap}
+.pins span{display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:rgba(61,220,151,.08);box-shadow:inset 0 0 0 1px rgba(61,220,151,.2);font-size:14px;color:var(--mint-2)}
+.pins span::before{content:"P";width:22px;height:22px;border-radius:7px;background:var(--mint);color:#04140D;display:grid;place-items:center;font:800 12px/1 var(--display)}
+
+/* DEMO */
+.demo{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,.75fr);gap:20px;align-items:stretch}
+.mapbox{position:relative;border-radius:28px;overflow:hidden;background:#0A1411;box-shadow:inset 0 0 0 1px var(--line-2);aspect-ratio:16/11}
+.mapbox svg{position:absolute;inset:0;width:100%;height:100%}
+.r-short,.r-safe{transition:opacity .5s,stroke-width .5s}
+.demo[data-mode="safe"] .r-short{opacity:.18}
+.demo[data-mode="short"] .r-safe{opacity:.18}
+.hz{transition:opacity .4s}
+.demo[data-mode="safe"] .hz{opacity:.35}
+.maplabel{position:absolute;left:16px;top:16px;font:500 11px/1 var(--mono);letter-spacing:.12em;color:var(--dim);text-transform:uppercase;padding:8px 10px;border-radius:8px;background:rgba(7,13,11,.7)}
+.panel{border-radius:28px;padding:26px;background:linear-gradient(180deg,var(--panel-2),var(--panel));box-shadow:inset 0 0 0 1px var(--line);display:flex;flex-direction:column;gap:18px}
+.seg{display:grid;grid-template-columns:1fr 1fr;padding:5px;border-radius:999px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px var(--line)}
+.seg button{font:600 14px/1 var(--text);padding:13px 10px;border-radius:999px;border:0;background:transparent;color:var(--muted);cursor:pointer;transition:background .3s,color .3s}
+.seg button[aria-pressed="true"]{background:var(--fg);color:#04140D}
+.seg button#b-safe[aria-pressed="true"]{background:var(--mint)}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{padding:16px;border-radius:18px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px var(--line)}
+.stat small{display:block;font:500 11px/1 var(--mono);letter-spacing:.1em;color:var(--dim);text-transform:uppercase;margin-bottom:10px}
+.stat b{font:800 28px/1 var(--display);font-variant-numeric:tabular-nums}
+.verdict{display:flex;gap:12px;align-items:center;padding:16px;border-radius:18px;font-weight:600;font-size:15px}
+.verdict.good{background:rgba(61,220,151,.1);color:var(--mint-2);box-shadow:inset 0 0 0 1px rgba(61,220,151,.3)}
+.verdict.bad{background:rgba(255,93,93,.1);color:#FFB0B0;box-shadow:inset 0 0 0 1px rgba(255,93,93,.3)}
+.note{font-size:13px;color:var(--dim)}
+
+/* HOW */
+.how{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;position:relative}
+.how::before{content:"";position:absolute;top:44px;left:8%;right:8%;height:2px;background:repeating-linear-gradient(90deg,var(--mint) 0 6px,transparent 6px 16px);opacity:.5}
+.step{position:relative;padding:28px;border-radius:26px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
+.step .n{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--bg);box-shadow:inset 0 0 0 2px var(--mint);font:700 14px/1 var(--mono);color:var(--mint);margin-bottom:22px}
+.step.core{background:linear-gradient(160deg,rgba(61,220,151,.16),var(--panel) 60%);box-shadow:inset 0 0 0 1px rgba(61,220,151,.4)}
+.step.core .n{background:var(--mint);color:#04140D}
+.step h3{font-size:26px;margin-bottom:14px}
+.step ul{margin:0;padding:0;list-style:none;display:grid;gap:9px;color:var(--muted);font-size:15px}
+.step li{display:flex;gap:10px}
+.step li::before{content:"→";color:var(--mint);font-family:var(--mono)}
+.stack{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px}
+.stack span{font:500 13px/1 var(--mono);padding:10px 14px;border-radius:10px;background:rgba(255,255,255,.03);box-shadow:inset 0 0 0 1px var(--line);color:var(--muted)}
+
+/* AUDIENCE */
+.tabs{display:inline-grid;grid-template-columns:1fr 1fr;padding:5px;border-radius:999px;background:rgba(255,255,255,.04);box-shadow:inset 0 0 0 1px var(--line);margin-bottom:24px}
+.tabs button{font:600 15px/1 var(--text);padding:14px 22px;border-radius:999px;border:0;background:transparent;color:var(--muted);cursor:pointer;transition:background .3s,color .3s}
+.tabs button[aria-selected="true"]{background:var(--fg);color:#04140D}
+.aud{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.aud div{padding:26px;border-radius:22px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line);min-height:170px;display:flex;flex-direction:column;justify-content:space-between;gap:20px;transition:transform .3s}
+.aud div:hover{transform:translateY(-4px)}
+.aud svg{width:30px;height:30px;color:var(--mint)}
+.aud.b2 svg{color:var(--orange)}
+.aud h3{font-size:20px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
+
+/* MODEL */
+.model{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.col{padding:36px;border-radius:28px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line)}
+.col.rev{background:linear-gradient(160deg,rgba(61,220,151,.14),var(--panel) 55%);box-shadow:inset 0 0 0 1px rgba(61,220,151,.35)}
+.col h3{font-size:30px;margin-bottom:24px}
+.col .k{font:500 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px;display:block}
+.col.rev .k{color:var(--mint)} .col.cost .k{color:var(--orange)}
+.col ol{margin:0;padding:0;list-style:none;display:grid;gap:0;counter-reset:i}
+.col li{counter-increment:i;display:flex;gap:16px;padding:16px 0;border-top:1px solid var(--line);color:var(--fg);font-weight:500}
+.col li::before{content:counter(i,decimal-leading-zero);font:500 13px/1.9 var(--mono);color:var(--dim)}
+
+/* PARTNERS */
+.partners{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.partners span{padding:16px 24px;border-radius:999px;background:var(--panel);box-shadow:inset 0 0 0 1px var(--line);font-weight:600;color:var(--muted);transition:color .2s,box-shadow .2s}
+.partners span:hover{color:var(--fg);box-shadow:inset 0 0 0 1px var(--line-2)}
+
+/* CTA */
+.cta{position:relative;overflow:hidden;isolation:isolate;border-radius:40px;padding:clamp(36px,7vw,90px);background:#0E2A1F;box-shadow:inset 0 0 0 1px rgba(61,220,151,.3);display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:48px;align-items:center}
+.cta::before{content:"";position:absolute;inset:-40%;z-index:-1;background:conic-gradient(from 0deg,transparent,rgba(61,220,151,.35),transparent 30%,rgba(255,138,61,.2),transparent 60%);animation:spin 14s linear infinite;filter:blur(40px)}
+@keyframes spin{to{transform:rotate(1turn)}}
+.cta h2{font-size:clamp(38px,5.4vw,72px);font-weight:900}
+.cta p{color:var(--muted);font-size:19px;margin-top:18px;max-width:40ch}
+.cta form{display:grid;gap:12px;padding:24px;border-radius:26px;background:rgba(7,13,11,.55);backdrop-filter:blur(10px);box-shadow:inset 0 0 0 1px var(--line-2)}
+.cta label{font-size:14px;font-weight:600;color:var(--muted)}
+.cta input{width:100%;font:500 16px var(--text);padding:17px 18px;border-radius:16px;border:0;background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px var(--line-2);color:var(--fg)}
+.cta input::placeholder{color:var(--dim)}
+.cta .msg{font-size:14px;min-height:1.5em;color:var(--mint-2)}
+.cta .msg.err{color:#FFB0B0}
+
+footer{padding-block:48px;color:var(--dim);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:center}
+.huge{font:900 clamp(80px,19vw,280px)/.85 var(--display);letter-spacing:-.06em;text-align:center;color:transparent;-webkit-text-stroke:1px rgba(170,255,214,.14);padding-block:40px 10px;user-select:none;overflow:hidden;white-space:nowrap}
+
+/* RESPONSIVE */
+@media (max-width:1000px){
+  .hero-grid,.problem-grid,.demo,.cta{grid-template-columns:minmax(0,1fr)}
+  .problem-grid .head{position:static}
+  .bento{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .c-route,.c-park{grid-column:span 2}
+  .c-alert,.c-score,.c-comm,.c-game{grid-column:span 1}
+  .aud{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stage{min-height:700px}
+  .f1{top:0;right:auto;left:0}
+  .f2{top:46%;left:auto;right:0}
+  .f3{bottom:0;right:auto;left:0}
+}
+@media (max-width:700px){
+  section.band{padding-block:80px}
+  .hero{padding-block:120px 70px}
+  .bento,.how,.model{grid-template-columns:minmax(0,1fr)}
+  .c-route,.c-park,.c-alert,.c-score,.c-comm,.c-game{grid-column:span 1}
+  .c-route .txt{max-width:none}
+  .c-route svg{position:relative;right:auto;bottom:auto;width:100%;margin-top:10px}
+  .how::before{display:none}
+  .pitem{grid-template-columns:44px 1fr}
+  .pitem svg{display:none}
+}
+@media (max-width:420px){
+  .aud{grid-template-columns:minmax(0,1fr)}
+  .phone{width:260px;height:530px}
+  .stage{min-height:640px}
+  .float{font-size:12px;padding:10px 12px}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="nav">
+      <a class="logo" href="#top" aria-label="CrossAI, əsas səhifə">
+        <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="10" fill="#3DDC97"/><path d="M8 23c3-9 6-2 9-8s4-6 7-6" stroke="#04140D" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="8" cy="23" r="2.6" fill="#04140D"/><circle cx="24" cy="9" r="2.6" fill="#04140D"/></svg>
+        <span>Cross<i>AI</i></span>
+      </a>
+      <nav class="nav-links" aria-label="Bölmələr">
+        <a href="#problem">Problem</a><a href="#features">İmkanlar</a><a href="#demo">Demo</a><a href="#tech">Texnologiya</a><a href="#model">Biznes</a>
+      </nav>
+      <a class="btn btn-primary" href="#join">Erkən giriş</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero" id="hero">
+    <canvas id="city" aria-hidden="true"></canvas>
+    <div class="wrap hero-grid">
+      <div>
+        <span class="badge"><b>AI</b> Smart Bicycle Mobility · Bakı</span>
+        <h1>
+          <span class="line"><span>Şəhəri</span></span>
+          <span class="line"><span class="grad">təhlükəsiz</span></span>
+          <span class="line"><span>pedalla.</span></span>
+        </h1>
+        <p class="lede">CrossAI velosipedçilər üçün Waze-dir: süni intellekt hər küçənin riskini hesablayır, ən təhlükəsiz marşrutu qurur və yolda səni qabaqcadan xəbərdar edir.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="#join">Gözləmə siyahısına yazıl
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <a class="btn btn-ghost" href="#demo">Demonu sına</a>
+        </div>
+        <div class="trust">
+          <div class="avatars" aria-hidden="true"><span style="background:#3DDC97">A</span><span style="background:#8CF5C4">N</span><span style="background:#FF8A3D">R</span><span style="background:#EDF5F0">+</span></div>
+          <span>Velosipedçilər, tələbələr və şəhər üçün qurulur</span>
+        </div>
+      </div>
+
+      <div class="stage" id="stage">
+        <div class="phone" id="phone" role="img" aria-label="CrossAI tətbiqinin ekranı: xəritədə yaşıl təhlükəsiz marşrut, çuxur xəbərdarlığı və 92 Safety Score">
+          <div class="notch"></div>
+          <div class="screen">
+            <svg class="map" viewBox="0 0 278 590" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <rect width="278" height="590" fill="#0C1714"/>
+              <g fill="#11221C"><rect x="18" y="120" width="70" height="80" rx="10"/><rect x="200" y="300" width="64" height="70" rx="10"/><rect x="20" y="300" width="56" height="60" rx="10"/><rect x="190" y="440" width="70" height="90" rx="10"/><rect x="110" y="20" width="60" height="50" rx="10"/></g>
+              <g stroke="#17302A" stroke-width="13" fill="none" stroke-linecap="round"><path d="M-10 220 L290 170"/><path d="M-10 400 L290 440"/><path d="M98 -10 L52 600"/><path d="M218 -10 L200 600"/></g>
+              <g stroke="#132820" stroke-width="5" fill="none"><path d="M-10 300 L290 290"/><path d="M150 -10 L168 600"/><path d="M-10 520 L290 500"/></g>
+              <path d="M56 540 C 120 470, 150 470, 160 420 S 200 300, 246 92" stroke="#FF5D5D" stroke-opacity=".35" stroke-width="5" fill="none" stroke-dasharray="3 9" stroke-linecap="round"/>
+              <path class="route" d="M56 540 C 80 450, 170 455, 178 385 S 110 280, 190 232 S 280 160, 246 92" stroke="#3DDC97" stroke-width="16" stroke-opacity=".18" fill="none" stroke-linecap="round"/>
+              <path class="route" d="M56 540 C 80 450, 170 455, 178 385 S 110 280, 190 232 S 280 160, 246 92" stroke="#3DDC97" stroke-width="7" fill="none" stroke-linecap="round"/>
+              <circle class="ping" cx="140" cy="440" r="16" fill="none" stroke="#FF8A3D" stroke-width="3"/>
+              <g transform="translate(140 440)"><circle r="12" fill="#FF8A3D"/><path d="M0 -6 V2" stroke="#1A0A00" stroke-width="3" stroke-linecap="round"/><circle cy="6" r="1.8" fill="#1A0A00"/></g>
+              <circle cx="56" cy="540" r="9" fill="#EDF5F0"/><circle cx="56" cy="540" r="4" fill="#0C1714"/>
+              <circle cx="246" cy="92" r="12" fill="#3DDC97"/><circle cx="246" cy="92" r="5" fill="#0C1714"/>
+              <circle class="rider" r="8" fill="#EDF5F0" stroke="#3DDC97" stroke-width="4"/>
+            </svg>
+            <div class="ui-top"><span class="turn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#04140D" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M7 20V10h10M13 6l4 4-4 4"/></svg></span><div><strong>120 m sonra sağa</strong>Velo-zolaq · Neftçilər pr.</div></div>
+            <div class="ui-bottom">
+              <div class="row"><div><small>Qalan</small><div class="big">14 dəq</div></div><div style="text-align:right"><small>Məsafə</small><div class="big">3,4 km</div></div></div>
+              <div class="bar"><i></i></div>
+            </div>
+          </div>
+        </div>
+        <div class="float f1"><span class="ic" style="background:rgba(61,220,151,.15)">
+          <svg class="score-ring" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="18" stroke="rgba(255,255,255,.1)" stroke-width="5" fill="none"/><circle cx="22" cy="22" r="18" stroke="#3DDC97" stroke-width="5" fill="none" stroke-dasharray="104 113" stroke-linecap="round" transform="rotate(-90 22 22)"/></svg></span>
+          <div><strong>Safety Score 92</strong>Marşrut təhlükəsizdir</div></div>
+        <div class="float f2"><span class="ic" style="background:#FF8A3D;color:#1A0A00;font:900 18px/1 var(--display)">!</span><div><strong>200 m sonra çuxur</strong>3 velosipedçi bildirib</div></div>
+        <div class="float f3"><span class="ic" style="background:rgba(255,138,61,.15);color:#FF8A3D;font:800 13px/1 var(--mono)">XP</span><div><strong>+120 xal</strong>Bu gün 8,2 km sürdün</div></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="marquee" aria-hidden="true">
+    <div class="track">
+      <span>Smart Route</span><span>Live Danger Alerts</span><span>AI Safety Score</span><span>Bike Community</span><span>Gamification</span><span>Bike Parking</span>
+      <span>Smart Route</span><span>Live Danger Alerts</span><span>AI Safety Score</span><span>Bike Community</span><span>Gamification</span><span>Bike Parking</span>
+    </div>
+  </div>
+
+  <!-- PROBLEM -->
+  <section class="band" id="problem">
+    <div class="wrap problem-grid">
+      <div class="head">
+        <span class="eyebrow">Problem</span>
+        <h2>Velosiped sürmək hələ də bir riskdir</h2>
+        <p>Yola çıxan velosipedçi hansı küçənin təhlükəsiz olduğunu, harada çuxur və ya tutulmuş zolaq olduğunu əvvəlcədən bilmir. Bu məlumat heç yerdə bir yerə toplanmayıb.</p>
+      </div>
+      <div class="plist">
+        <div class="pitem"><span class="num">01</span><div><h3>Təhlükəsiz marşrut çatışmır</h3><p>Xəritələr avtomobil üçün qurulub</p></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
+        <div class="pitem"><span class="num">02</span><div><h3>Zolaqları avtomobillər tutur</h3><p>Velo-zolaq kağız üzərində var, yolda yox</p></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="9" width="18" height="7" rx="2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></svg></div>
+        <div class="pitem"><span class="num">03</span><div><h3>Çuxur və maneələr bilinmir</h3><p>Təhlükəni yalnız qarşına çıxanda görürsən</p></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17v.5"/></svg></div>
+        <div class="pitem"><span class="num">04</span><div><h3>Vahid məlumat bazası yoxdur</h3><p>Yol vəziyyəti haqqında data dağınıqdır</p></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg></div>
+        <div class="pitem"><span class="num">05</span><div><h3>Velosiped az təşviq olunur</h3><p>Sürməyə motivasiya verən heç nə yoxdur</p></div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M6 17l4-8h6l2 8"/></svg></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="band" id="features" style="padding-top:20px">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Həll</span>
+        <h2>Bir tətbiq. Altı super güc.</h2>
+        <p>CrossAI yolu velosipedçinin gözü ilə görür və hər qərarı təhlükəsizliyə görə verir.</p>
+      </div>
+      <div class="bento">
+        <article class="card c-route">
+          <div class="txt"><span class="k">Smart Route</span><h3>Ən qısa yol yox, ən təhlükəsiz yol</h3><p>Velo-zolaqları, trafik sıxlığını və risk xəritəsini nəzərə alıb marşrut qurur.</p></div>
+          <svg viewBox="0 0 420 300" aria-hidden="true"><g stroke="rgba(170,255,214,.08)" stroke-width="1"><path d="M0 60H420M0 140H420M0 220H420M80 0V300M200 0V300M320 0V300"/></g><path d="M30 270 C 90 200, 160 250, 200 180 S 300 60, 390 40" stroke="#3DDC97" stroke-width="18" stroke-opacity=".15" fill="none" stroke-linecap="round"/><path d="M30 270 C 90 200, 160 250, 200 180 S 300 60, 390 40" stroke="#3DDC97" stroke-width="6" fill="none" stroke-linecap="round"/><circle cx="30" cy="270" r="9" fill="#EDF5F0"/><circle cx="390" cy="40" r="11" fill="#3DDC97"/><circle cx="390" cy="40" r="4" fill="#0F1B17"/></svg>
+        </article>
+        <article class="card warn c-alert">
+          <span class="k">Live Danger Alerts</span><h3>Təhlükəni əvvəlcədən bil</h3><p>Çuxur, tıxac, maneə barədə canlı xəbərdarlıq.</p>
+          <div class="ripple" aria-hidden="true"><i></i><i></i><i></i><b>!</b></div>
+        </article>
+        <article class="card c-score">
+          <span class="k">AI Safety Score</span><h3>Hər yolun risk qiyməti</h3>
+          <div class="gauge"><svg viewBox="0 0 110 110" aria-hidden="true"><circle cx="55" cy="55" r="46" stroke="rgba(255,255,255,.08)" stroke-width="10" fill="none"/><circle cx="55" cy="55" r="46" stroke="url(#gg)" stroke-width="10" fill="none" stroke-dasharray="266 289" stroke-linecap="round" transform="rotate(-90 55 55)"/><defs><linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8CF5C4"/><stop offset="1" stop-color="#3DDC97"/></linearGradient></defs></svg><div><span class="v">92</span><small>Nümunə<br>marşrut balı</small></div></div>
+        </article>
+        <article class="card c-comm">
+          <span class="k">Bike Community</span><h3>Xəritəni birlikdə yeniləyin</h3>
+          <div class="feed"><div><b style="background:#3DDC97">A</b>Bulvarda zolaq açıqdır</div><div><b style="background:#FF8A3D">N</b>Nizami küç. çuxur var</div></div>
+        </article>
+        <article class="card warn c-game">
+          <span class="k">Gamification & Rewards</span><h3>Sür, xal topla, qazan</h3>
+          <div class="xp"><div class="lvl"><span>Səviyyə 7</span><span>740 / 1000 XP</span></div><div class="bar"><i></i></div><div class="medals"><span class="m">Erkən quş</span><span>100 km</span><span class="m">Kəşfiyyatçı</span></div></div>
+        </article>
+        <article class="card c-park">
+          <div style="max-width:520px;display:grid;gap:10px"><span class="k">Bike Parking</span><h3>Velosipedini harada saxlayacağını bil</h3><p>Yaxınlıqdakı dayanacaqlar xəritədə, marşrutun sonunda.</p></div>
+          <div class="pins"><span>Fəvvarələr meydanı</span><span>28 May</span><span>Bulvar</span><span>Universitet</span></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- DEMO -->
+  <section class="band" id="demo" style="background:var(--bg-2);border-block:1px solid var(--line)">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Canlı demo</span>
+        <h2>Fərqi özün gör</h2>
+        <p>Eyni başlanğıc, eyni hədəf. Marşrutu dəyiş və CrossAI-ın necə qərar verdiyinə bax.</p>
+      </div>
+      <div class="demo" id="demoBox" data-mode="safe">
+        <div class="mapbox">
+          <svg viewBox="0 0 640 440" aria-label="Nümunə xəritə: qırmızı ən qısa marşrut təhlükəli nöqtələrdən keçir, yaşıl CrossAI marşrutu onları yan keçir">
+            <rect width="640" height="440" fill="#0A1411"/>
+            <g fill="#0F201A"><rect x="40" y="40" width="120" height="90" rx="14"/><rect x="200" y="40" width="160" height="70" rx="14"/><rect x="420" y="60" width="170" height="110" rx="14"/><rect x="40" y="180" width="100" height="120" rx="14"/><rect x="250" y="170" width="120" height="110" rx="14"/><rect x="440" y="230" width="150" height="80" rx="14"/><rect x="160" y="330" width="200" height="80" rx="14"/></g>
+            <g stroke="#13281F" stroke-width="16" fill="none" stroke-linecap="round"><path d="M0 155 H640"/><path d="M0 315 H640"/><path d="M185 0 V440"/><path d="M400 0 V440"/></g>
+            <path d="M0 210 C 200 200, 420 210, 640 200" stroke="#1B3A2D" stroke-width="10" fill="none"/>
+            <path class="r-short" d="M80 390 L 185 315 L 400 155 L 560 50" stroke="#FF5D5D" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 12"/>
+            <path class="r-safe" d="M80 390 C 120 330, 170 330, 185 270 S 160 210, 260 205 S 420 215, 440 190 S 500 80, 560 50" stroke="#3DDC97" stroke-width="8" fill="none" stroke-linecap="round"/>
+            <g class="hz"><circle cx="292" cy="235" r="15" fill="#FF8A3D"/><path d="M292 228 V237" stroke="#1A0A00" stroke-width="3" stroke-linecap="round"/><circle cx="292" cy="242" r="1.8" fill="#1A0A00"/></g>
+            <g class="hz"><circle cx="360" cy="184" r="15" fill="#FF5D5D"/><path d="M353 184 H367" stroke="#1A0A00" stroke-width="3" stroke-linecap="round"/></g>
+            <circle cx="80" cy="390" r="12" fill="#EDF5F0"/><circle cx="80" cy="390" r="5" fill="#0A1411"/>
+            <circle cx="560" cy="50" r="14" fill="#3DDC97"/><circle cx="560" cy="50" r="6" fill="#0A1411"/>
+          </svg>
+          <span class="maplabel">Nümunə xəritə</span>
+        </div>
+        <div class="panel">
+          <div class="seg" role="group" aria-label="Marşrut növü">
+            <button id="b-short" type="button" aria-pressed="false">Ən qısa yol</button>
+            <button id="b-safe" type="button" aria-pressed="true">CrossAI marşrutu</button>
+          </div>
+          <div class="stats">
+            <div class="stat"><small>Məsafə</small><b id="s-dist">3,4 km</b></div>
+            <div class="stat"><small>Vaxt</small><b id="s-time">14 dəq</b></div>
+            <div class="stat"><small>Safety Score</small><b id="s-score" style="color:var(--mint)">92</b></div>
+            <div class="stat"><small>Maneələr</small><b id="s-haz">0</b></div>
+          </div>
+          <div class="verdict good" id="verdict"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></svg><span id="v-text">Təhlükəsiz: 3 dəqiqə artıq, amma çuxur və tıxac yoxdur.</span></div>
+          <p class="note">Rəqəmlər nümunədir, real marşrut məlumatı deyil.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TECH -->
+  <section class="band" id="tech">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">AI və texnologiya</span>
+        <h2>Datadan təhlükəsiz marşruta</h2>
+        <p>Məlumat toplanır, AI modeli onu qiymətləndirir, tətbiq isə nəticəni saniyələr içində sənə göstərir.</p>
+      </div>
+      <div class="how">
+        <div class="step"><span class="n">1</span><h3>Toplanır</h3><ul><li>GPS və OpenStreetMap</li><li>İstifadəçi bildirişləri</li><li>Real vaxt yol datası</li></ul></div>
+        <div class="step core"><span class="n">2</span><h3>AI qiymətləndirir</h3><ul><li>Risk qiymətləndirmə modeli</li><li>Machine Learning: risk nümunələri</li><li>Computer Vision: maneə aşkarı</li></ul></div>
+        <div class="step"><span class="n">3</span><h3>Sən görürsən</h3><ul><li>Təhlükəsiz marşrut</li><li>Canlı xəbərdarlıq</li><li>Safety Score</li></ul></div>
+      </div>
+      <div class="stack" aria-label="Texnologiyalar"><span>Python</span><span>SQL</span><span>React</span><span>OpenStreetMap</span><span>Machine Learning</span><span>Computer Vision</span><span>GPS</span></div>
+    </div>
+  </section>
+
+  <!-- AUDIENCE -->
+  <section class="band" id="audience" style="padding-top:20px">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Kimlər üçün</span>
+        <h2>Velosipedçi üçün. Şəhər üçün.</h2>
+      </div>
+      <div class="tabs" role="tablist" aria-label="Auditoriya">
+        <button role="tab" id="t-b2c" aria-selected="true" aria-controls="p-b2c" type="button">Velosipedçilər · B2C</button>
+        <button role="tab" id="t-b2b" aria-selected="false" aria-controls="p-b2b" type="button">Biznes və dövlət · B2B/B2G</button>
+      </div>
+      <div class="aud" id="p-b2c" role="tabpanel" aria-labelledby="t-b2c">
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M6 17l4-8h6l2 8M10 9 8 5H6"/></svg><h3>Gündəlik velosipedçilər</h3></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5L2 9z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/></svg><h3>İşə və universitetə gedənlər</h3></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3z"/></svg><h3>Yeni başlayanlar və idmançılar</h3></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></svg><h3>Kirayə istifadəçiləri</h3></div>
+      </div>
+      <div class="aud b2" id="p-b2b" role="tabpanel" aria-labelledby="t-b2b" hidden>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 21h18M5 21V10l7-5 7 5v11M9 21v-6h6v6"/></svg><h3>Bələdiyyə və nəqliyyat qurumları</h3></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16l-1 13H5L4 7z"/><path d="M9 7a3 3 0 0 1 6 0"/></svg><h3>Velosiped mağazaları</h3></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4 2.5-2.5z"/></svg><h3>Servis mərkəzləri</h3></div>
+        <div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3"/></svg><h3>Kirayə mərkəzləri</h3></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MODEL -->
+  <section class="band" id="model" style="padding-top:20px">
+    <div class="wrap">
+      <div class="head">
+        <span class="eyebrow">Biznes model</span>
+        <h2>Pulsuz başla. Premium ilə böyü.</h2>
+      </div>
+      <div class="model">
+        <div class="col rev"><span class="k">Gəlir mənbələri</span><h3>Maliyyələşdirmə</h3><ol><li>Freemium + premium xidmətlər</li><li>Mağaza, kirayə və servis tərəfdaşlığı</li><li>Reklam və sponsorluq</li><li>B2G analitik hesabatlar</li><li>Qrantlar</li></ol></div>
+        <div class="col cost"><span class="k">Əsas xərclər</span><h3>İnvestisiya sahələri</h3><ol><li>Tətbiq və AI modellərinin hazırlanması</li><li>Server, bulud və xəritə inteqrasiyası</li><li>Data təhlükəsizliyi və texniki dəstək</li><li>Marketinq və mükafat kampaniyaları</li></ol></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PARTNERS -->
+  <section class="band" style="padding-top:0">
+    <div class="wrap" style="display:grid;gap:28px;justify-items:center;text-align:center">
+      <span class="eyebrow">Tərəfdaşlar</span>
+      <div class="partners"><span>AYNA</span><span>Bakı Şəhər İcra Hakimiyyəti</span><span>Kirayə şirkətləri</span><span>Velosiped mağazaları</span><span>Xəritə və texnologiya şirkətləri</span><span>Universitetlər</span><span>Eko icmalar</span></div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="band" id="join" style="padding-top:0">
+    <div class="wrap">
+      <div class="cta">
+        <div>
+          <span class="eyebrow">Erkən giriş</span>
+          <h2 style="margin-top:18px">Bakını velosiped üçün <span class="grad">təhlükəsiz</span> edək.</h2>
+          <p>Pilot versiya çıxanda ilk sınayanlardan ol. Tərəfdaşlıq üçün də yazın.</p>
+        </div>
+        <form id="waitlist" novalidate>
+          <label for="email">E-poçt ünvanın</label>
+          <input id="email" type="email" placeholder="ad@mail.az" autocomplete="email" required>
+          <button class="btn btn-primary" type="submit">Gözləmə siyahısına yazıl</button>
+          <p class="msg" id="msg" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="huge" aria-hidden="true">CrossAI</div>
+  <div class="wrap"><span><b style="color:var(--fg)">CrossAI</b> · AI-Powered Smart Bicycle Mobility</span><span>Bakı · 2026</span></div>
+</footer>
+
+<script>
+(function(){
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* Live city canvas */
+  var cv = document.getElementById('city'), ctx = cv.getContext('2d'), W, H, dpr, roads = [], routes = [], t = 0;
+  function rnd(a,b){return a+Math.random()*(b-a)}
+  function build(){
+    dpr = Math.min(window.devicePixelRatio||1, 2);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W*dpr; cv.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+    roads = [];
+    for(var x=-40; x<W+40; x+=rnd(70,140)) roads.push({x1:x, y1:-20, x2:x+rnd(-60,60), y2:H+20, w:rnd(1,2.2)});
+    for(var y=-40; y<H+40; y+=rnd(60,120)) roads.push({x1:-20, y1:y, x2:W+20, y2:y+rnd(-50,50), w:rnd(1,2.2)});
+    routes = [];
+    for(var i=0;i<6;i++){
+      var pts=[], px=rnd(0,W), py=H+20;
+      for(var k=0;k<6;k++){ pts.push([px,py]); px+=rnd(-W*.25,W*.25); py-=H/5; }
+      routes.push({pts:pts, c: i%3===2 ? '255,138,61' : '61,220,151', off:Math.random(), sp:rnd(.0006,.0014)});
+    }
+  }
+  function pt(r,u){
+    var n=r.pts.length-1, f=u*n, i=Math.min(Math.floor(f),n-1), l=f-i;
+    var a=r.pts[i], b=r.pts[i+1]; return [a[0]+(b[0]-a[0])*l, a[1]+(b[1]-a[1])*l];
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='rgba(170,255,214,.06)';
+    roads.forEach(function(r){ctx.lineWidth=r.w;ctx.beginPath();ctx.moveTo(r.x1,r.y1);ctx.lineTo(r.x2,r.y2);ctx.stroke();});
+    routes.forEach(function(r){
+      ctx.strokeStyle='rgba('+r.c+',.10)'; ctx.lineWidth=2; ctx.beginPath();
+      r.pts.forEach(function(p,i){ i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }); ctx.stroke();
+      var u=(r.off+t*r.sp)%1;
+      for(var k=0;k<14;k++){
+        var uu=u-k*.006; if(uu<0) continue; var p=pt(r,uu);
+        ctx.fillStyle='rgba('+r.c+','+(0.9*(1-k/14))+')';
+        ctx.beginPath(); ctx.arc(p[0],p[1],k?2.2:3.6,0,7); ctx.fill();
+      }
+      var h=pt(r,u); var g=ctx.createRadialGradient(h[0],h[1],0,h[0],h[1],28);
+      g.addColorStop(0,'rgba('+r.c+',.35)'); g.addColorStop(1,'rgba('+r.c+',0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(h[0],h[1],28,0,7); ctx.fill();
+    });
+  }
+  function loop(){ t++; draw(); if(!reduce) requestAnimationFrame(loop); }
+  build(); loop();
+  var rt; window.addEventListener('resize', function(){ clearTimeout(rt); rt=setTimeout(function(){build(); if(reduce) draw();},150); });
+
+  /* 3D phone tilt */
+  var hero=document.getElementById('hero'), phone=document.getElementById('phone');
+  if(!reduce && matchMedia('(pointer:fine)').matches){
+    hero.addEventListener('mousemove', function(e){
+      var r=hero.getBoundingClientRect(), x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5;
+      phone.style.transform='rotateY('+(-14+x*18)+'deg) rotateX('+(6-y*12)+'deg)';
+    });
+    hero.addEventListener('mouseleave', function(){ phone.style.transform=''; });
+  }
+
+  /* card spotlight */
+  document.querySelectorAll('.card').forEach(function(c){
+    c.addEventListener('pointermove', function(e){ var r=c.getBoundingClientRect(); c.style.setProperty('--mx',(e.clientX-r.left)+'px'); c.style.setProperty('--my',(e.clientY-r.top)+'px'); });
+  });
+
+  /* route demo */
+  var box=document.getElementById('demoBox'), bS=document.getElementById('b-short'), bA=document.getElementById('b-safe');
+  var data={
+    safe:{dist:'3,4 km',time:'14 dəq',score:'92',haz:'0',col:'var(--mint)',ok:true,txt:'Təhlükəsiz: 3 dəqiqə artıq, amma çuxur və tıxac yoxdur.'},
+    short:{dist:'2,9 km',time:'11 dəq',score:'41',haz:'2',col:'var(--red)',ok:false,txt:'Riskli: çuxur və avtomobillərin tutduğu zolaqdan keçir.'}
+  };
+  function setMode(m){
+    var d=data[m]; box.dataset.mode=m;
+    bS.setAttribute('aria-pressed', m==='short'); bA.setAttribute('aria-pressed', m==='safe');
+    document.getElementById('s-dist').textContent=d.dist;
+    document.getElementById('s-time').textContent=d.time;
+    var sc=document.getElementById('s-score'); sc.textContent=d.score; sc.style.color=d.col;
+    document.getElementById('s-haz').textContent=d.haz;
+    var v=document.getElementById('verdict'); v.className='verdict '+(d.ok?'good':'bad');
+    document.getElementById('v-text').textContent=d.txt;
+  }
+  bS.addEventListener('click', function(){setMode('short')});
+  bA.addEventListener('click', function(){setMode('safe')});
+
+  /* audience tabs */
+  var tabs=[['t-b2c','p-b2c'],['t-b2b','p-b2b']];
+  tabs.forEach(function(p){
+    document.getElementById(p[0]).addEventListener('click', function(){
+      tabs.forEach(function(q){ var on=q[0]===p[0]; document.getElementById(q[0]).setAttribute('aria-selected',on); document.getElementById(q[1]).hidden=!on; });
+    });
+  });
+
+  /* waitlist */
+  document.getElementById('waitlist').addEventListener('submit', function(e){
+    e.preventDefault();
+    var v=document.getElementById('email').value.trim(), m=document.getElementById('msg');
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)){ m.className='msg err'; m.textContent='Düzgün e-poçt ünvanı yazın, məsələn ad@mail.az'; return; }
+    m.className='msg'; m.textContent='Təşəkkürlər! Bu demo səhifədir, ünvan hələ heç yerə göndərilmir.'; this.reset();
+  });
+})();
+</script>
+</body>
+</html>
